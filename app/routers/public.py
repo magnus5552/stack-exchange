@@ -22,15 +22,21 @@ async def register(request: Request, new_user: user.NewUser, db: Session = Depen
     logger.info(f"Registration request from {client_ip} for user: {new_user.name}")
     
     try:
-        user_model = await create_user({"name": new_user.name})
+        user_data = await create_user({"name": new_user.name})
 
         # Создаем пользователя в БД
         from app.repositories.user_repository import UserRepository
 
         user_repo = UserRepository(db)
         user_entity = user_repo.create(
-            name=user_model.name, api_key=user_model.api_key, role=user_model.role
+            user_id=user_data.id,
+            name=user_data.name, 
+            api_key=user_data.api_key, 
+            role=user_data.role
         )
+        
+        # Получаем модель пользователя из репозитория
+        user_model = user_repo.to_model(user_entity)
         
         elapsed = time.time() - start_time
         logger.info(f"User registered successfully: id={user_model.id}, name={user_model.name}, time={elapsed:.2f}s")

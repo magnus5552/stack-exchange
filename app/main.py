@@ -5,8 +5,6 @@ import time
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.openapi.docs import get_swagger_ui_html, get_redoc_html
-from fastapi.responses import RedirectResponse
 
 from app.core.database import get_db
 from app.core.init_db import create_admin_user, init_database
@@ -77,26 +75,13 @@ try:
 except Exception as e:
     logger.error(f"Ошибка инициализации базы данных: {e}", exc_info=True)
 
-api_v1 = FastAPI(
-    title="Stock Exchange API",
-    description="API версии v1 для биржевой торговли",
-    version="1.0.0",
-    docs_url=None,
-    redoc_url=None,
-    openapi_url=None,
-)
+# Регистрация роутеров напрямую в основном приложении
+logger.info("Регистрация роутеров API")
+app.include_router(public.router, prefix="/public")
+app.include_router(balance.router, prefix="/balance")
+app.include_router(order.router, prefix="/order")
+app.include_router(admin.router, prefix="/admin")
 
-api_v1.include_router(public.router, prefix="/public")
-api_v1.include_router(balance.router, prefix="/balance")
-api_v1.include_router(order.router, prefix="/order")
-api_v1.include_router(admin.router, prefix="/admin")
-
-app.mount("/api/v1", api_v1)
-
-@app.get("/api", include_in_schema=False)
-async def api_root_redirect():
-    """Перенаправляет с /api на актуальную версию API"""
-    return RedirectResponse(url="/api/v1")
 
 def get_system_info():
     """Собирает информацию о системе для логирования без использования psutil"""
@@ -118,10 +103,12 @@ async def startup_event():
     logger.info("=" * 50)
     logger.info("Инициализация приложения Stock Exchange API...")
     
+    # Логирование информации о системе
     system_info = get_system_info()
     logger.info(f"Системная информация: {system_info}")
     
     try:
+        # Проверяем соединение с базой данных
         db = next(get_db())
         logger.info("Соединение с базой данных успешно установлено")
         
@@ -129,6 +116,7 @@ async def startup_event():
         try:
             logger.info("Создание администратора, если необходимо...")
             admin_key = create_admin_user(db)
+            # API ключ будет автоматически замаскирован фильтром безопасности в логгере
             logger.info(f"API ключ администратора: {admin_key}")
             
             # Выводим ключ в консоль для администратора при запуске
@@ -140,6 +128,7 @@ async def startup_event():
         logger.info("=" * 50)
     except Exception as e:
         logger.error(f"Ошибка при запуске: {e}", exc_info=True)
+        # Лучше не поднимать исключение, чтобы приложение могло запуститься в любом случае
         logger.error("Запуск приложения завершился с ошибками")
         logger.info("=" * 50)
 
@@ -149,6 +138,7 @@ async def shutdown_event():
     """Событие завершения работы приложения"""
     logger.info("=" * 50)
     logger.info("Завершение работы Stock Exchange API...")
+    # Здесь можно добавить код для корректного завершения работы
     logger.info("Приложение завершило работу")
     logger.info("=" * 50)
 
@@ -157,13 +147,19 @@ async def shutdown_event():
 async def root():
     """Корневая точка API"""
     logger.debug("Доступ к корневой точке API")
-    return {"message": "Добро пожаловать в Stock Exchange API", "version": "0.1.0"}
+    return {
+        "message": "Добро пожаловать в Stock Exchange API",
+        "version": "1.0.0",
+        "docs_url": "/docs"
+    }
 
 
-@app.get("/health", include_in_schema=False)
+@app.get("/health", tags=["system"])
 async def health():
+    """Endpoint для проверки состояния сервиса"""
     logger.debug("Доступ к точке проверки здоровья системы")
     
+    # Собираем базовую информацию о здоровье системы без psutil
     uptime_seconds = int(time.time() - APP_START_TIME)
     days, remainder = divmod(uptime_seconds, 86400)
     hours, remainder = divmod(remainder, 3600)
@@ -182,31 +178,4 @@ async def health():
     return health_data
 
 
-@app.get("/api/v1/docs", include_in_schema=False)
-async def get_api_v1_docs():
-    """Рендерит Swagger UI для API v1"""
-    root_path = "/api/v1"
-    openapi_url = f"{root_path}/openapi.json"
-    
-    return get_swagger_ui_html(
-        openapi_url=openapi_url,
-        title="Stock Exchange API v1 - Swagger UI",
-        swagger_js_url="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-bundle.js",
-        swagger_css_url="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui.css",
-    )
-
-@app.get("/api/v1/redoc", include_in_schema=False)
-async def get_api_v1_redoc():
-    root_path = "/api/v1"
-    openapi_url = f"{root_path}/openapi.json"
-    
-    return get_redoc_html(
-        openapi_url=openapi_url,
-        title="Stock Exchange API v1 - ReDoc",
-        redoc_js_url="https://cdn.jsdelivr.net/npm/redoc@next/bundles/redoc.standalone.js",
-    )
-
-@app.get("/api/v1/openapi.json", include_in_schema=False)
-async def get_api_v1_openapi():
-    """Возвращает OpenAPI JSON схему для API v1"""
-    return app.openapi()
+# Все эндпоинты API размещены под корневым URL

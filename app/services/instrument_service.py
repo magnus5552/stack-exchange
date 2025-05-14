@@ -21,28 +21,60 @@ class InstrumentService:
         self.logger.debug(f"Found {count} active instruments")
         return [self.repository.to_model(i) for i in instruments]
 
-    async def add_instrument(self, instrument: Instrument) -> Ok:
-        """Добавляет новый инструмент"""
-        self.logger.info(f"Adding new instrument: {instrument.ticker} ({instrument.name})")
+    async def get_instrument(self, ticker: str, include_inactive: bool = False) -> Instrument:
+        """
+        Получает инструмент по тикеру
         
-        # Проверка на существование инструмента с таким тикером
-        existing = self.repository.get_by_ticker(instrument.ticker)
-        if existing:
-            self.logger.warning(f"Instrument with ticker {instrument.ticker} already exists")
+        Args:
+            ticker: Тикер инструмента
+            include_inactive: Если True, ищет также среди неактивных инструментов
+            
+        Returns:
+            Instrument: Модель инструмента
+            
+        Raises:
+            HTTPException: Если инструмент не найден
+        """
+        self.logger.info(f"Getting instrument: {ticker}, include_inactive={include_inactive}")
+        
+        entity = self.repository.get_by_ticker(ticker, only_active=not include_inactive)
+        if not entity:
+            self.logger.warning(f"Instrument with ticker {ticker} not found")
             raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Instrument with ticker {instrument.ticker} already exists",
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Instrument with ticker {ticker} not found",
             )
+            
+        return self.repository.to_model(entity)
 
-        try:
-            self.repository.create(instrument.name, instrument.ticker)
-            self.logger.info(f"Successfully created instrument: {instrument.ticker}")
-            return Ok()
-        except Exception as e:
-            self.logger.error(f"Failed to create instrument {instrument.ticker}: {str(e)}")
-            raise HTTPException(
-                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail="Failed to create instrument",
+    async def add_instrument(self, instrument: Instrument) -> Ok:
+            """
+            Добавляет новый инструмент или активирует существующий неактивный
+            
+            Если инструмент уже существует и активен, возвращается ошибка.
+            Если инструмент существует, но неактивен (был удален), он будет активирован.
+            """
+            self.logger.info(f"Adding/activating instrument: {instrument.ticker} ({instrument.name})")
+            
+            # Проверка на существование активного инструмента с таким тикером
+            existing = self.repository.get_by_ticker(instrument.ticker, only_active=True)
+            if existing:
+                self.logger.warning(f"Active instrument with ticker {instrument.ticker} already exists")
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Instrument with ticker {instrument.ticker} already exists",
+                )
+    
+            try:
+                # Метод create теперь автоматически активирует существующий неактивный инструмент
+                self.repository.create(instrument.name, instrument.ticker)
+                self.logger.info(f"Successfully created/activated instrument: {instrument.ticker}")
+                return Ok()
+            except Exception as e:
+                self.logger.error(f"Failed to create/activate instrument {instrument.ticker}: {str(e)}")
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=f"Failed to create/activate instrument: {str(e)}",
             )
 
     async def delete_instrument(self, ticker: str) -> Ok:

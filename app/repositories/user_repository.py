@@ -1,9 +1,11 @@
+from typing import Optional
 from uuid import UUID, uuid4
-from typing import Optional, List
+
 from sqlalchemy.orm import Session
+
+from app.core.logging import setup_logger
 from app.entities.user import UserEntity
 from app.models.user import User, UserRole
-from app.core.logging import setup_logger
 
 
 class UserRepository:
@@ -12,16 +14,23 @@ class UserRepository:
         self._model = UserEntity  # Добавляем атрибут _model
         self.logger = setup_logger("app.repositories.user")
 
-    def create(
-        self, name: str, api_key: str, role: UserRole = UserRole.USER
-    ) -> UserEntity:
-        """Создает нового пользователя в БД"""
-        user_id = uuid4()
-        self.logger.info(f"Creating new user in DB: name={name}, role={role}")
+    def create(self, name: str, api_key: str, role: UserRole = UserRole.USER, user_id: UUID = None) -> UserEntity:
+        """
+        Создает нового пользователя в БД
+
+        Args:
+            name: Имя пользователя
+            api_key: API ключ пользователя
+            role: Роль пользователя
+            user_id: UUID пользователя (если None, будет сгенерирован новый)
+        """
+        if user_id is None:
+            user_id = uuid4()
+
+        self.logger.info(f"Creating new user in DB: id={user_id}, name={name}, role={role}")
         
         try:
-            db_user = UserEntity(
-                id=user_id,
+            db_user = UserEntity(id=user_id,
                 name=name, 
                 api_key=api_key, 
                 role=role.value if hasattr(role, 'value') else str(role),
@@ -38,49 +47,89 @@ class UserRepository:
             self.db.rollback()
             raise
 
-    def get_by_id(self, user_id: UUID) -> Optional[UserEntity]:
-        """Получает пользователя по ID"""
-        self.logger.debug(f"Fetching user by ID: {user_id}")
-        user = self.db.query(UserEntity).filter(UserEntity.id == user_id).first()
-        
+    def get_by_id(self, user_id: UUID, include_inactive: bool = False) -> Optional[UserEntity]:
+        """
+        Получает пользователя по ID
+
+        Args:
+            user_id: Идентификатор пользователя
+            include_inactive: Если True, возвращает также неактивных пользователей
+        """
+        self.logger.debug(f"Fetching user by ID: {user_id}, include_inactive={include_inactive}")
+
+        query = self.db.query(UserEntity).filter(UserEntity.id == user_id)
+
+        if not include_inactive:
+            query = query.filter(UserEntity.is_active == True)
+
+        user = query.first()
+
         if user:
-            self.logger.debug(f"Found user: {user_id}")
+            status = "active" if user.is_active else "inactive"
+            self.logger.debug(f"Found {status} user: {user_id}")
         else:
-            self.logger.debug(f"User not found: {user_id}")
+            status_text = "active" if not include_inactive else ""
+            self.logger.debug(f"{status_text} User not found: {user_id}")
             
         return user
 
-    def get_by_api_key(self, api_key: str) -> Optional[UserEntity]:
-        """Получает пользователя по API ключу"""
+    def get_by_api_key(self, api_key: str, include_inactive: bool = False) -> Optional[UserEntity]:
+        """
+        Получает пользователя по API ключу
+
+        Args:
+            api_key: API ключ пользователя
+            include_inactive: Если True, возвращает также неактивных пользователей
+        """
         # Скрываем полный API ключ в логах для безопасности
         masked_key = f"{api_key[:8]}..." if len(api_key) > 8 else "***"
-        self.logger.debug(f"Fetching user by API key: {masked_key}")
-        
-        user = self.db.query(UserEntity).filter(UserEntity.api_key == api_key).first()
-        
+        self.logger.debug(f"Fetching user by API key: {masked_key}, include_inactive={include_inactive}")
+
+        query = self.db.query(UserEntity).filter(UserEntity.api_key == api_key)
+
+        if not include_inactive:
+            query = query.filter(UserEntity.is_active == True)
+
+        user = query.first()
+
         if user:
-            self.logger.debug(f"Found user by API key: id={user.id}")
+            status = "active" if user.is_active else "inactive"
+            self.logger.debug(f"Found {status} user by API key: id={user.id}")
         else:
-            self.logger.debug(f"User not found by API key: {masked_key}")
+            status_text = "active" if not include_inactive else ""
+            self.logger.debug(f"{status_text} User not found by API key: {masked_key}")
             
         return user
 
     def delete(self, user_id: UUID) -> Optional[UserEntity]:
-        """Удаляет пользователя по ID"""
-        self.logger.info(f"Deleting user: {user_id}")
-        
+        """
+        Деактивирует пользователя по ID (мягкое удаление)
+
+        Вместо физического удаления записи из БД, помечает пользователя как неактивного.
+        Это позволяет сохранить связанные данные и избежать нарушения ограничений внешнего ключа.
+        """
+        self.logger.info(f"Deactivating user: {user_id}")
+
         try:
             user = self.get_by_id(user_id)
-            if user:
-                self.db.delete(user)
-                self.db.commit()
-                self.logger.info(f"User {user_id} deleted successfully")
-            else:
-                self.logger.warning(f"Delete failed: User {user_id} not found")
-                
+            if not user:
+                self.logger.warning(f"Deactivation failed: User {user_id} not found")
+                return None
+
+            # Если пользователь уже неактивен
+            if not user.is_active:
+                self.logger.info(f"User {user_id} is already inactive")
+                return user
+
+            # Мягкое удаление - устанавливаем флаг is_active в False
+            user.is_active = False
+            self.db.commit()
+            self.db.refresh(user)
+            self.logger.info(f"User {user_id} deactivated successfully")
+
             return user
         except Exception as e:
-            self.logger.error(f"Error deleting user {user_id}: {str(e)}")
+            self.logger.error(f"Error deactivating user {user_id}: {str(e)}")
             self.db.rollback()
             raise
 

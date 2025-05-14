@@ -22,18 +22,25 @@ async def delete_user(
     admin: UserEntity = AdminUser,
     db: Session = Depends(get_db)
 ):
-    """Удаление пользователя (только для администраторов)"""
+    """
+    Деактивация пользователя (только для администраторов)
+    
+    Выполняет мягкое удаление пользователя - пользователь помечается как неактивный,
+    но сохраняется в базе данных вместе со всеми связанными записями.
+    
+    Администраторов удалить невозможно.
+    """
     client_ip = request.client.host if request.client else "unknown"
-    logger.info(f"Admin {admin.id} ({admin.name}) requested to delete user {user_id} from {client_ip}")
+    logger.info(f"Admin {admin.id} ({admin.name}) requested to deactivate user {user_id} from {client_ip}")
     
     try:
         service = UserService(db)
-        deleted_user = await service.delete_user(user_id)
+        deactivated_user = await service.delete_user(user_id)
         
-        logger.info(f"User {user_id} successfully deleted by admin {admin.id}")
-        return deleted_user
+        logger.info(f"User {user_id} successfully deactivated by admin {admin.id}")
+        return deactivated_user
     except Exception as e:
-        logger.error(f"Failed to delete user {user_id} by admin {admin.id}: {str(e)}")
+        logger.error(f"Failed to deactivate user {user_id} by admin {admin.id}: {str(e)}")
         raise
 
 

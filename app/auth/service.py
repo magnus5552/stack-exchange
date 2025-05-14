@@ -10,6 +10,15 @@ logger = setup_logger("app.auth.service")
 
 
 async def create_user(user_data: Dict) -> User:
+    """
+    Создает модель пользователя с уникальным идентификатором и API ключом
+    
+    Args:
+        user_data: Словарь с данными пользователя (должен содержать ключ 'name')
+        
+    Returns:
+        User: Модель данных пользователя с заполненными полями
+    """
     user_id = uuid4()
     logger.debug(f"Generated user_id: {user_id}")
 

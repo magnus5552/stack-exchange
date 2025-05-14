@@ -29,13 +29,29 @@ class BalanceService:
         return {balance.ticker: balance.amount for balance in balances}
 
     async def deposit(self, user_id: UUID, ticker: str, amount: int) -> Ok:
+        """
+        Пополняет баланс пользователя
+
+        Args:
+            user_id: Идентификатор пользователя
+            ticker: Тикер инструмента
+            amount: Сумма пополнения (должна быть положительной)
+
+        Returns:
+            Ok: Результат успешной операции
+
+        Raises:
+            HTTPException: Если пользователь не найден, инструмент не найден или сумма неверна
+        """
+        # Проверяем существование пользователя
         user = self.user_repo.get_by_id(user_id)
-        if not user:
+        if not user or not user.is_active:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"User with id {user_id} not found",
+                detail=f"Active user with id {user_id} not found",
             )
 
+        # Проверяем существование инструмента, кроме рубля (особый случай)
         if ticker != "RUB":
             instrument = self.instrument_repo.get_by_ticker(ticker)
             if not instrument:
@@ -44,24 +60,43 @@ class BalanceService:
                     detail=f"Instrument with ticker {ticker} not found",
                 )
 
+        # Проверяем корректность суммы
         if amount <= 0:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Amount must be positive",
             )
 
+        # Обновляем баланс
         self.balance_repo.update_balance(user_id, ticker, amount)
 
         return Ok()
 
     async def withdraw(self, user_id: UUID, ticker: str, amount: int) -> Ok:
+        """
+        Списывает средства с баланса пользователя
+
+        Args:
+            user_id: Идентификатор пользователя
+            ticker: Тикер инструмента
+            amount: Сумма списания (должна быть положительной)
+
+        Returns:
+            Ok: Результат успешной операции
+
+        Raises:
+            HTTPException: Если пользователь не найден, инструмент не найден,
+                          сумма неверна или недостаточно средств
+        """
+        # Проверяем существование пользователя
         user = self.user_repo.get_by_id(user_id)
-        if not user:
+        if not user or not user.is_active:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"User with id {user_id} not found",
+                detail=f"Active user with id {user_id} not found",
             )
 
+        # Проверяем существование инструмента, кроме рубля (особый случай)
         if ticker != "RUB":
             instrument = self.instrument_repo.get_by_ticker(ticker)
             if not instrument:
@@ -70,12 +105,14 @@ class BalanceService:
                     detail=f"Instrument with ticker {ticker} not found",
                 )
 
+        # Проверяем корректность суммы
         if amount <= 0:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Amount must be positive",
             )
 
+        # Проверяем достаточность средств
         balance = self.balance_repo.get_by_user_and_ticker(user_id, ticker)
         if not balance or balance.amount < amount:
             raise HTTPException(
@@ -83,6 +120,7 @@ class BalanceService:
                 detail=f"Insufficient {ticker} balance",
             )
 
+        # Списываем средства
         self.balance_repo.update_balance(user_id, ticker, -amount)
 
         return Ok()

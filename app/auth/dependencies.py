@@ -41,12 +41,13 @@ async def get_current_user(
 
     token = parts[1]
     user_repo = UserRepository(db)
-    user = user_repo.get_by_api_key(token)
+    # Получаем только активных пользователей
+    user = user_repo.get_by_api_key(token, include_inactive=False)
 
     if not user:
-        logger.warning(f"Invalid token from {client_ip} to {endpoint}: {token[:8]}...")
+        logger.warning(f"Invalid token or inactive user from {client_ip} to {endpoint}: {token[:8]}...")
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired token"
+            status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid, expired token or deactivated user"
         )
 
     logger.info(f"User {user.id} ({user.name}) authenticated from {client_ip} to {endpoint}")
