@@ -1,7 +1,8 @@
 from datetime import datetime
 from enum import Enum
+from typing import List
+
 from pydantic import BaseModel
-from typing import Union, List, Dict, Any
 
 
 class Direction(str, Enum):

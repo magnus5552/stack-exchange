@@ -1,16 +1,13 @@
-from pydantic import BaseModel
-from enum import Enum
 from uuid import UUID
-
+from enum import Enum
+from pydantic import BaseModel
 
 class UserRole(str, Enum):
-    USER = "USER"
     ADMIN = "ADMIN"
-
+    USER = "USER"
 
 class NewUser(BaseModel):
     name: str
-
 
 class User(NewUser):
     id: UUID

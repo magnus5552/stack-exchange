@@ -1,0 +1,1 @@
+from app.core.version import __version__, API_VERSION, API_PREFIX
