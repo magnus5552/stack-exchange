@@ -349,13 +349,18 @@ class ExchangeService:
             
             # Создаем запись о транзакции
             self.logger.info(f"Creating transaction: ticker={order.ticker}, amount={execution_qty}, price={execution_price}")
-            self.transaction_repo.create(
-                ticker=order.ticker,
-                amount=execution_qty,
-                price=execution_price,
-                buyer_order_id=buyer_order_id,
-                seller_order_id=seller_order_id,
-            )
+            try:
+                self.transaction_repo.create(
+                    ticker=order.ticker,
+                    amount=execution_qty,
+                    price=execution_price,
+                    buyer_order_id=buyer_order_id,
+                    seller_order_id=seller_order_id
+                )
+                self.logger.info(f"Transaction created successfully for order {order.id} with {matching_order.id}")
+            except Exception as e:
+                self.logger.error(f"Error creating transaction: {e}")
+                raise
 
             # Обновляем остаток для следующей итерации
             remaining_qty -= execution_qty

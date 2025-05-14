@@ -30,9 +30,12 @@ class L2OrderBook(BaseModel):
 
 
 class Transaction(BaseModel):
+    id: str
     ticker: str
     amount: int
     price: int
+    buyer_order_id: str
+    seller_order_id: str
     timestamp: datetime
 
 
