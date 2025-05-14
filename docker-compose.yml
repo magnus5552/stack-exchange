@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   api:
     build: .
@@ -22,8 +20,6 @@ services:
       - POSTGRES_DB=exchange
     volumes:
       - postgres-data:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
     networks:
       - exchange-network
     restart: unless-stopped
