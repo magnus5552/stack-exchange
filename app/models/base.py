@@ -1,7 +1,8 @@
 from datetime import datetime
 from enum import Enum
+from typing import List
+
 from pydantic import BaseModel
-from typing import Union, List, Dict, Any
 
 
 class Direction(str, Enum):
@@ -29,9 +30,12 @@ class L2OrderBook(BaseModel):
 
 
 class Transaction(BaseModel):
+    id: str
     ticker: str
     amount: int
     price: int
+    buyer_order_id: str
+    seller_order_id: str
     timestamp: datetime
 
 

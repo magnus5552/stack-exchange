@@ -1,60 +1,56 @@
-from datetime import datetime, timedelta, timezone
-from typing import Optional, Annotated
+from typing import Optional
 
-import jwt
-from passlib.context import CryptContext
-from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi import Depends, HTTPException, status
+from fastapi import Header
+from sqlalchemy.orm import Session
 
-from app.core.config import settings
-from app.models import User, UserRole
-
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-security = HTTPBearer()
-
-
-def verify_password(plain_password: str, hashed_password: str) -> bool:
-    return pwd_context.verify(plain_password, hashed_password)
-
-
-def get_password_hash(password: str) -> str:
-    return pwd_context.hash(password)
-
-
-def create_access_token(data: dict) -> str:
-    to_encode = data.copy()
-    encoded_jwt = jwt.encode(to_encode, settings.SECRET_KEY,
-                             algorithm=settings.ALGORITHM)
-    return encoded_jwt
-
-
-def decode_token(token: str):
-    try:
-        payload = jwt.decode(token, settings.SECRET_KEY,
-                             algorithms=[settings.ALGORITHM])
-        return payload
-    except jwt.PyJWTError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Could not validate credentials",
-        )
+from app.core.database import get_db
+from app.entities.user import UserEntity
+from app.repositories.user_repository import UserRepository
 
 
 async def get_current_user(
-        credentials: HTTPAuthorizationCredentials = Depends(security)):
-    if not credentials.scheme == settings.AUTH_SCHEME:
+    authorization: Optional[str] = Header(None),
+    db: Session = Depends(get_db)
+) -> UserEntity:
+    if not authorization:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated"
+        )
+    
+    parts = authorization.split()
+    if parts[0].lower() != "token":
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication scheme"
+        )
+    
+    if len(parts) == 1:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token"
+        )
+    
+    token = parts[1]
+    user_repo = UserRepository(db)
+    user = user_repo.get_by_api_key(token)
+    
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired token"
+        )
+    
+    return user
+
+
+async def get_admin_user(
+    user: UserEntity = Depends(get_current_user)
+) -> UserEntity:
+    if user.role != "ADMIN":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Invalid authentication scheme",
+            detail="Admin privileges required"
         )
-
-    token = credentials.credentials
-    payload = decode_token(token)
-    # Здесь должна быть проверка пользователя в БД
-    return payload
-
-
-async def get_admin_user(user: User = Depends(get_current_user)):
-    if user.role != UserRole.ADMIN:
-        raise HTTPException(status_code=403, detail="Forbidden")
     return user
