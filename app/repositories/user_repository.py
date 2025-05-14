@@ -111,7 +111,8 @@ class UserRepository:
         self.logger.info(f"Deactivating user: {user_id}")
 
         try:
-            user = self.get_by_id(user_id)
+            # Получаем пользователя с учетом неактивных
+            user = self.get_by_id(user_id, include_inactive=True)
             if not user:
                 self.logger.warning(f"Deactivation failed: User {user_id} not found")
                 return None

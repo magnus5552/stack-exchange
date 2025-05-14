@@ -4,6 +4,8 @@ from uuid import UUID
 from fastapi import HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.core.logging import setup_logger
+from app.entities.order import OrderEntity
 from app.models.base import Direction, OrderStatus, L2OrderBook, Level, Transaction
 from app.models.order import LimitOrderBody, MarketOrderBody, LimitOrder, MarketOrder
 from app.repositories.balance_repository import BalanceRepository
@@ -15,6 +17,7 @@ from app.repositories.transaction_repository import TransactionRepository
 class ExchangeService:
     def __init__(self, db: Session):
         self.db = db
+        self.logger = setup_logger("app.services.exchange")
         self.order_repo = OrderRepository(db)
         self.balance_repo = BalanceRepository(db)
         self.transaction_repo = TransactionRepository(db)
@@ -341,15 +344,17 @@ class ExchangeService:
                 self.balance_repo.update_balance(matching_order.user_id, order.ticker, execution_qty)
 
 
-            buyer_id = order.id if is_buy else matching_order.id
-            seller_id = matching_order.id if is_buy else order.id
-
+            buyer_order_id = order.id if is_buy else matching_order.id
+            seller_order_id = matching_order.id if is_buy else order.id
+            
+            # Создаем запись о транзакции
+            self.logger.info(f"Creating transaction: ticker={order.ticker}, amount={execution_qty}, price={execution_price}")
             self.transaction_repo.create(
                 ticker=order.ticker,
                 amount=execution_qty,
                 price=execution_price,
-                buyer_order_id=buyer_id,
-                seller_order_id=seller_id,
+                buyer_order_id=buyer_order_id,
+                seller_order_id=seller_order_id,
             )
 
             # Обновляем остаток для следующей итерации
