@@ -6,12 +6,14 @@ from sqlalchemy.orm import Session
 from app.core.logging import setup_logger
 from app.entities.transaction import TransactionEntity
 from app.models.base import Transaction
+from app.repositories.balance_repository import BalanceRepository
 
 
 class TransactionRepository:
     def __init__(self, db: Session):
         self.db = db
         self.logger = setup_logger("app.repositories.transaction")
+        self.balance_repository = BalanceRepository(db)
         
     def create(self, ticker: str, amount: int, price: int, buyer_order_id: UUID, seller_order_id: UUID) -> TransactionEntity:
         """
@@ -39,6 +41,53 @@ class TransactionRepository:
             self.db.add(transaction)
             self.db.commit()
             self.db.refresh(transaction)
+            
+            # Запускаем асинхронное обновление балансов для улучшения производительности
+            # Вместо прямого обновления используем асинхронную задачу
+            from app.services.order_service import OrderService
+            order_service = OrderService(self.db)
+            
+            # Получаем информацию о ордерах
+            try:
+                buyer_order = order_service.get_by_id(buyer_order_id)
+                seller_order = order_service.get_by_id(seller_order_id)
+            except Exception as e:
+                self.logger.error(f"Ошибка при получении ордеров: {str(e)}")
+                # Продолжаем выполнение, даже если не можем получить ордеры
+                buyer_order = None
+                seller_order = None
+            
+            # Если у нас есть оба ордера, выполняем асинхронное обновление балансов
+            if buyer_order and seller_order:
+                try:
+                    # Асинхронно обновляем баланс покупателя (добавляем актив)
+                    self.balance_repository.update_balance_async(
+                        buyer_order.user_id, ticker, amount
+                    )
+                    # Асинхронно обновляем баланс продавца (вычитаем актив)
+                    self.balance_repository.update_balance_async(
+                        seller_order.user_id, ticker, -amount
+                    )
+                    
+                    # Асинхронно обновляем баланс денег
+                    total_price = amount * price
+                    self.balance_repository.update_balance_async(
+                        buyer_order.user_id, "RUB", -total_price
+                    )
+                    self.balance_repository.update_balance_async(
+                        seller_order.user_id, "RUB", total_price
+                    )
+                    
+                    self.logger.info(f"Запущены асинхронные задачи обновления балансов для транзакции {transaction.id}")
+                except Exception as e:
+                    self.logger.error(f"Ошибка при обновлении балансов: {str(e)}. Транзакция создана, но балансы могут быть не обновлены.")
+            else:
+                self.logger.warning(
+                    f"Невозможно обновить балансы асинхронно: один или оба ордера не найдены. "
+                    f"buyer_order_id={buyer_order_id}, seller_order_id={seller_order_id}"
+                )
+                # В этом случае можно использовать другую стратегию обновления балансов,
+                # например, через событийную модель или другой сервис
             
             self.logger.info(f"Transaction created successfully: {transaction.id}")
             return transaction
