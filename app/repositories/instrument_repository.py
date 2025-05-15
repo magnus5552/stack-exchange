@@ -1,6 +1,7 @@
 from typing import List, Optional
 from sqlalchemy.orm import Session
 from app.entities.instrument import InstrumentEntity
+from app.entities.transaction import TransactionEntity
 from app.models.instrument import Instrument
 from app.core.logging import setup_logger
 
@@ -98,7 +99,7 @@ class InstrumentRepository:
             raise
 
     def delete(self, ticker: str) -> bool:
-        """Удаляет (деактивирует) инструмент по тикеру"""
+        """Удаляет (деактивирует) инструмент по тикеру и все связанные транзакции"""
         self.logger.info(f"Deactivating instrument: {ticker}")
         
         try:
@@ -106,8 +107,22 @@ class InstrumentRepository:
             if not instrument:
                 self.logger.warning(f"Delete failed: Active instrument {ticker} not found")
                 return False
-
-            # Софт-удаление (деактивация)
+    
+            # Удаляем все транзакции, связанные с этим инструментом
+            self.logger.info(f"Deleting all transactions for ticker: {ticker}")
+            transactions = self.db.query(TransactionEntity).filter(
+                TransactionEntity.ticker == ticker
+            ).all()
+            
+            if transactions:
+                self.logger.info(f"Found {len(transactions)} transactions to delete for {ticker}")
+                for transaction in transactions:
+                    self.db.delete(transaction)
+                self.logger.info(f"All transactions for {ticker} have been deleted")
+            else:
+                self.logger.info(f"No transactions found for ticker {ticker}")
+    
+            # Софт-удаление (деактивация) инструмента
             instrument.is_active = False
             self.db.commit()
             

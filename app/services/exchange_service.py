@@ -307,7 +307,7 @@ class ExchangeService:
                 # Для покупки берем только ордера с ценой ниже или равной нашей цене
                 active_orders = active_orders.filter(OrderEntity.price <= order.price)
                 # Сортируем по цене (сначала самые дешевые)
-                active_orders = active_orders.order_by(OrderEntity.price, OrderEntity.created_at)
+                active_orders = active_orders.order_by(OrderEntity.price.asc(), OrderEntity.created_at)
             else:
                 # Для продажи берем только ордера с ценой выше или равной нашей цене
                 active_orders = active_orders.filter(OrderEntity.price >= order.price)
@@ -316,7 +316,7 @@ class ExchangeService:
         else:  # market order
             if is_buy:
                 # Для покупки берем самые дешевые ордера сначала
-                active_orders = active_orders.order_by(OrderEntity.price, OrderEntity.created_at)
+                active_orders = active_orders.order_by(OrderEntity.price.asc(), OrderEntity.created_at)
             else:
                 # Для продажи берем самые дорогие ордера сначала
                 active_orders = active_orders.order_by(OrderEntity.price.desc(), OrderEntity.created_at)
