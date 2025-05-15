@@ -17,16 +17,17 @@ class BalanceService:
         self.instrument_repo = InstrumentRepository(db)
 
     async def get_user_balances(self, user_id: UUID) -> Dict[str, int]:
-        user = self.user_repo.get_by_id(user_id)
-        if not user:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"User with id {user_id} not found",
-            )
-
-        balances = self.balance_repo.get_all_by_user(user_id)
-
-        return {balance.ticker: balance.amount for balance in balances}
+            user = self.user_repo.get_by_id(user_id)
+            if not user:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail=f"User with id {user_id} not found",
+                )
+        
+            balances = self.balance_repo.get_all_by_user(user_id)
+        
+            # Возвращаем общую сумму (включая заблокированные средства)
+            return {balance.ticker: balance.amount for balance in balances}
 
     async def deposit(self, user_id: UUID, ticker: str, amount: int) -> Ok:
         """
@@ -112,12 +113,12 @@ class BalanceService:
                 detail="Amount must be positive",
             )
 
-        # Проверяем достаточность средств
+        # Проверяем достаточность средств (с учетом заблокированных)
         balance = self.balance_repo.get_by_user_and_ticker(user_id, ticker)
-        if not balance or balance.amount < amount:
+        if not balance or (balance.amount - balance.locked_amount) < amount:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Insufficient {ticker} balance",
+                detail=f"Insufficient available {ticker} balance",
             )
 
         # Списываем средства

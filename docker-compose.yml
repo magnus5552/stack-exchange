@@ -4,6 +4,7 @@ services:
     ports:
       - "8000:8000"
     environment:
+      - ADMIN_TOKEN=admin-key-defc40d7
       - DB_CONN_STRING=postgresql://postgres:postgres@postgres:5432/exchange
       - DB_ECHO=True
       - REDIS_HOST=redis

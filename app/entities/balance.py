@@ -14,3 +14,4 @@ class BalanceEntity(BaseEntity):
     user_id = Column(UUID(as_uuid=True), ForeignKey("users.id"), nullable=False)
     ticker = Column(String(10), nullable=False)
     amount = Column(Integer, default=0, nullable=False)
+    locked_amount = Column(Integer, default=0, nullable=False)

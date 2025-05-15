@@ -86,20 +86,34 @@ class ExchangeService:
                     detail=f"Insufficient RUB balance for order"
                 )
 
-            # Резервируем средства
-            self.balance_repo.update_balance(user_id, "RUB", -required_amount)
+            # Блокируем средства вместо их списания
+            balance_locked = self.balance_repo.lock_balance(user_id, "RUB", required_amount)
+            if balance_locked is None:
+                available = self.balance_repo.get_by_user_and_ticker(user_id, "RUB")
+                available_amount = (available.amount - available.locked_amount) if available else 0
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Недостаточно доступных средств RUB для блокировки (доступно {available_amount}, требуется {required_amount})"
+                )
         else:  # Direction.SELL
             # Для продажи нужны акции
             balance = self.balance_repo.get_by_user_and_ticker(user_id, body.ticker)
-
+            
             if not balance or balance.amount < body.qty:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=f"Insufficient {body.ticker} balance for order"
                 )
-
-            # Резервируем акции
-            self.balance_repo.update_balance(user_id, body.ticker, -body.qty)
+            
+            # Блокируем акции вместо их списания
+            balance_locked = self.balance_repo.lock_balance(user_id, body.ticker, body.qty)
+            if balance_locked is None:
+                available = self.balance_repo.get_by_user_and_ticker(user_id, body.ticker)
+                available_amount = (available.amount - available.locked_amount) if available else 0
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Недостаточно доступных средств {body.ticker} для блокировки (доступно {available_amount}, требуется {body.qty})"
+                )
 
         # Создаем ордер
         order = self.order_repo.create_limit_order(user_id, body)
@@ -155,8 +169,15 @@ class ExchangeService:
                     detail=f"Insufficient RUB balance for market order"
                 )
 
-            # Резервируем средства
-            self.balance_repo.update_balance(user_id, "RUB", -required_amount)
+            # Блокируем средства вместо их списания
+            balance_locked = self.balance_repo.lock_balance(user_id, "RUB", required_amount)
+            if balance_locked is None:
+                available = self.balance_repo.get_by_user_and_ticker(user_id, "RUB")
+                available_amount = (available.amount - available.locked_amount) if available else 0
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Недостаточно доступных средств RUB для блокировки (доступно {available_amount}, требуется {required_amount})"
+                )
         else:  # Direction.SELL
             # Для продажи нужны bid ордера
             if not orderbook.bid_levels:
@@ -164,7 +185,7 @@ class ExchangeService:
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="No buyers available for market sell"
                 )
-
+            
             # Проверяем баланс акций
             balance = self.balance_repo.get_by_user_and_ticker(user_id, body.ticker)
             if not balance or balance.amount < body.qty:
@@ -172,7 +193,7 @@ class ExchangeService:
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=f"Insufficient {body.ticker} balance for market order"
                 )
-
+            
             # Проверяем, хватит ли ликвидности для продажи
             available_qty = sum(level.qty for level in orderbook.bid_levels)
             if available_qty < body.qty:
@@ -180,14 +201,23 @@ class ExchangeService:
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Not enough liquidity in the order book"
                 )
-
-            # Резервируем акции
-            self.balance_repo.update_balance(user_id, body.ticker, -body.qty)
+            
+            # Блокируем акции вместо их списания
+            balance_locked = self.balance_repo.lock_balance(user_id, body.ticker, body.qty)
+            if balance_locked is None:
+                available = self.balance_repo.get_by_user_and_ticker(user_id, body.ticker)
+                available_amount = (available.amount - available.locked_amount) if available else 0
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Недостаточно доступных средств {body.ticker} для блокировки (доступно {available_amount}, требуется {body.qty})"
+                )
 
         # Создаем маркет-ордер
         order = self.order_repo.create_market_order(user_id, body)
 
-        # Выполняем матчинг ордеров
+        # Выполняем матчинг ордеров и обработку транзакций со списанием заблокированных средств
+        # Обратите внимание, в методе _match_orders нужно добавить вызовы unlock_and_subtract_balance
+        # для списания заблокированных средств при исполнении ордера
         await self._match_orders(order.id)
 
         return str(order.id)
@@ -223,17 +253,21 @@ class ExchangeService:
                 detail=f"Cannot cancel order with status {order.status}"
             )
 
-        # Возвращаем средства обратно на баланс пользователя
+        # Разблокируем средства обратно на баланс пользователя
         if order.direction == Direction.BUY:
-            # Возвращаем неиспользованные средства
+            # Разблокируем неиспользованные средства
             remaining_value = (order.qty - order.filled) * order.price
             if remaining_value > 0:
-                self.balance_repo.update_balance(user_id, "RUB", remaining_value)
+                balance_result = self.balance_repo.unlock_balance(user_id, "RUB", remaining_value)
+                if balance_result is None:
+                    self.logger.error(f"Ошибка при разблокировке средств: user_id={user_id}, ticker=RUB, amount={remaining_value}")
         else:  # Direction.SELL
-            # Возвращаем неиспользованные акции
+            # Разблокируем неиспользованные акции
             remaining_qty = order.qty - order.filled
             if remaining_qty > 0:
-                self.balance_repo.update_balance(user_id, order.ticker, remaining_qty)
+                balance_result = self.balance_repo.unlock_balance(user_id, order.ticker, remaining_qty)
+                if balance_result is None:
+                    self.logger.error(f"Ошибка при разблокировке средств: user_id={user_id}, ticker={order.ticker}, amount={remaining_qty}")
 
         # Отменяем ордер
         result = self.order_repo.cancel_order(order_id)
@@ -333,13 +367,35 @@ class ExchangeService:
 
             # Обновляем балансы пользователей
             if is_buy:
+                # Разблокируем и списываем средства покупателя (RUB)
+                balance_result = self.balance_repo.unlock_and_subtract_balance(order.user_id, "RUB", execution_qty * execution_price)
+                if balance_result is None:
+                    self.logger.error(f"Ошибка при списании средств покупателя: user_id={order.user_id}, amount={execution_qty * execution_price}")
+                
                 # Покупатель получает акции
                 self.balance_repo.update_balance(order.user_id, order.ticker, execution_qty)
+                
+                # Разблокируем и списываем акции продавца
+                balance_result = self.balance_repo.unlock_and_subtract_balance(matching_order.user_id, order.ticker, execution_qty)
+                if balance_result is None:
+                    self.logger.error(f"Ошибка при списании акций продавца: user_id={matching_order.user_id}, ticker={order.ticker}, amount={execution_qty}")
+                
                 # Продавец получает деньги
                 self.balance_repo.update_balance(matching_order.user_id, "RUB", execution_qty * execution_price)
             else:
+                # Разблокируем и списываем акции продавца (order.user_id)
+                balance_result = self.balance_repo.unlock_and_subtract_balance(order.user_id, order.ticker, execution_qty)
+                if balance_result is None:
+                    self.logger.error(f"Ошибка при списании акций продавца: user_id={order.user_id}, ticker={order.ticker}, amount={execution_qty}")
+                
                 # Продавец получает деньги
                 self.balance_repo.update_balance(order.user_id, "RUB", execution_qty * execution_price)
+                
+                # Разблокируем и списываем средства покупателя
+                balance_result = self.balance_repo.unlock_and_subtract_balance(matching_order.user_id, "RUB", execution_qty * execution_price)
+                if balance_result is None:
+                    self.logger.error(f"Ошибка при списании средств покупателя: user_id={matching_order.user_id}, amount={execution_qty * execution_price}")
+                
                 # Покупатель получает акции
                 self.balance_repo.update_balance(matching_order.user_id, order.ticker, execution_qty)
 

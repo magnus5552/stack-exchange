@@ -22,6 +22,8 @@ def init_database():
         raise
 
 
+from app.core.config import settings
+
 def create_admin_user(db: Session) -> str:
     logger.info("Проверка наличия администратора в системе...")
     
@@ -37,11 +39,18 @@ def create_admin_user(db: Session) -> str:
 
         logger.info("Администратор не найден. Создание нового администратора...")
         admin_id = uuid.uuid4()
-        api_key = f"admin-key-{str(admin_id)[:8]}"
+        
+        # Используем предустановленный токен администратора, если он задан
+        if settings.ADMIN_TOKEN:
+            api_key = settings.ADMIN_TOKEN
+            logger.info("Используется предустановленный токен администратора из настроек")
+        else:
+            api_key = f"admin-key-{str(admin_id)[:8]}"
+            logger.info("Предустановленный токен администратора не задан, генерируется автоматически")
 
         admin = repo.create(name="Admin", api_key=api_key, role=UserRole.ADMIN)
         
-        logger.info(f"Администратор успешно создан: id={admin_id}, API ключ={api_key}")
+        logger.info(f"Администратор успешно создан: id={admin.id}, API ключ={api_key}")
         
         return api_key
     except Exception as e:
