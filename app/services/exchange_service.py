@@ -33,8 +33,8 @@ class ExchangeService:
 
         # Сортируем bids по возрастанию цены (лучшая цена покупки - самая низкая)
         bids.sort(key=lambda x: x.price)
-        # Сортируем asks по убыванию цены (лучшая цена продажи - самая высокая)
-        asks.sort(key=lambda x: x.price, reverse=True)
+        # Сортируем asks по возрастанию цены (лучшая цена продажи - самая высокая)
+        asks.sort(key=lambda x: x.price)
 
         # Группируем по ценовым уровням и суммируем количество
         bid_levels = {}
