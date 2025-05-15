@@ -81,10 +81,10 @@ def checkin_handler(dbapi_conn, conn_record):
 
 SessionLocal = scoped_session(
     sessionmaker(
-        autocommit=False,
+        autocommit=True,
         autoflush=True,
         bind=engine,
-        expire_on_commit=False
+        expire_on_commit=True
     )
 )
 
