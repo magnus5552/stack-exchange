@@ -50,19 +50,6 @@ class OrderRepository:
         self.logger.info(f"Creating new market order: id={order_id}, user={user_id}, ticker={body.ticker}")
         
         try:
-            # Для маркет-ордеров на продажу блокируем количество инструментов
-            # Для маркет-ордеров на покупку блокировка не нужна, так как цена заранее неизвестна
-            # и будет определена при исполнении ордера
-            if body.direction == Direction.SELL:
-                # Блокируем количество инструментов указанного тикера
-                balance_locked = self.balance_repo.lock_balance(user_id, body.ticker, body.qty)
-                if not balance_locked:
-                    self.logger.warning(f"Insufficient funds to lock for market order: user={user_id}, ticker={body.ticker}, amount={body.qty}")
-                    raise HTTPException(
-                        status_code=status.HTTP_400_BAD_REQUEST,
-                        detail=f"Insufficient funds for {body.ticker}"
-                    )
-            
             order = MarketOrderEntity(
                 id=order_id,
                 user_id=user_id,
