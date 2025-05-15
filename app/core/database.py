@@ -66,13 +66,6 @@ def checkout_handler(dbapi_conn, conn_record, conn_proxy):
             logger.warning(f"Высокая загрузка пула соединений! {pool_status}")
         else:
             logger.debug(f"Соединение взято из пула. {pool_status}")
-        
-        # Мониторинг долгих транзакций
-        @event.listens_for(engine, "checkin", once=True)
-        def checkin_conn(dbapi_connection, connection_record):
-            duration = time.time() - connection_record.info['checkout_time']
-            if duration > 2.0:  # Предупреждение о долгих транзакциях
-                logger.warning(f"Долгая транзакция: {duration:.2f} секунд")
     except Exception as e:
         logger.error(f"Ошибка мониторинга соединения: {e}")
 
@@ -135,7 +128,3 @@ def get_db():
     finally:
         # Оптимизация: закрываем сессию, возвращая соединение в пул
         db.close()
-        # Логирование долгих транзакций
-        duration = time.time() - start_time
-        if duration > 0.5:  # Порог для "медленных" транзакций
-            logger.warning(f"Долгая транзакция: {duration:.3f} сек")
