@@ -19,7 +19,7 @@ logger = setup_logger("app.auth.dependencies")
 # Кеш действителен в течение 5 минут для активных пользователей
 USER_CACHE: Dict[str, Tuple[UserEntity, datetime]] = {}
 CACHE_TTL = timedelta(minutes=5)
-CACHE_CLEANUP_INTERVAL = 60  # Секунды между очистками кеша
+CACHE_CLEANUP_INTERVAL = 60
 last_cleanup = time.time()
 
 
@@ -61,8 +61,7 @@ async def get_current_user(
     """
     client_ip = request.client.host if request.client else "unknown"
     endpoint = request.url.path
-    
-    # Минимальное логирование для высокопроизводительных эндпоинтов
+
     is_high_volume = any(path in endpoint for path in ['/api/v1/orders', '/api/v1/balances', '/api/v1/instruments'])
     
     if not authorization:
@@ -83,25 +82,21 @@ async def get_current_user(
 
     token = parts[1]
     
-    # Проверка кеша для снижения нагрузки на БД
     if token in USER_CACHE:
         user, cache_time = USER_CACHE[token]
         if datetime.now() - cache_time < CACHE_TTL:
             return user
-        # Очищаем устаревшую запись из кеша
         USER_CACHE.pop(token, None)
     
-    # Периодическая очистка кеша
     cleanup_user_cache()
     
     try:
         start_time = time.time()
         user_repo = UserRepository(db)
-        # Получаем только активных пользователей
         user = user_repo.get_by_api_key(token, include_inactive=False)
 
         query_time = time.time() - start_time
-        if query_time > 0.1:  # Логируем медленные запросы на аутентификацию
+        if query_time > 0.1:
             logger.warning(f"Slow auth query: {query_time:.3f}s for token ending with {token[-4:]}")
 
         if not user:
@@ -112,7 +107,6 @@ async def get_current_user(
                 detail="Invalid or expired token"
             )
 
-        # Добавляем пользователя в кеш
         USER_CACHE[token] = (user, datetime.now())
         
         if not is_high_volume:
@@ -150,6 +144,5 @@ async def get_admin_user(
     return user
 
 
-# Оптимизированные зависимости для внедрения
 CurrentUser = Depends(get_current_user)
 AdminUser = Depends(get_admin_user)

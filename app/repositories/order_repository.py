@@ -22,26 +22,6 @@ class OrderRepository:
         self.logger.info(f"Creating new limit order: id={order_id}, user={user_id}, ticker={body.ticker}")
         
         try:
-            # Если это ордер на продажу (SELL), блокируем указанное количество инструментов
-            # Если это ордер на покупку (BUY), блокируем сумму средств в RUB (qty * price)
-            if body.direction == Direction.SELL:
-                # Для SELL блокируем количество инструментов указанного тикера
-                lock_ticker = body.ticker
-                lock_amount = body.qty
-            else:  # BUY
-                # Для BUY блокируем рубли в количестве (qty * price)
-                lock_ticker = "RUB"
-                lock_amount = body.qty * body.price
-                
-            # Проверяем наличие и блокируем средства
-            balance_locked = self.balance_repo.lock_balance(user_id, lock_ticker, lock_amount)
-            if not balance_locked:
-                self.logger.warning(f"Insufficient funds to lock for order: user={user_id}, ticker={lock_ticker}, amount={lock_amount}")
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Insufficient funds for {lock_ticker}"
-                )
-            
             # Создаем ордер
             order = LimitOrderEntity(
                 id=order_id,

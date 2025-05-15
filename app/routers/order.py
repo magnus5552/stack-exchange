@@ -36,7 +36,6 @@ async def create_order(
     try:
         service = ExchangeService(db)
 
-        # Определяем тип ордера и вызываем соответствующий метод
         if isinstance(body, order.LimitOrderBody):
             order_id = await service.create_limit_order(user.id, body)
         else:

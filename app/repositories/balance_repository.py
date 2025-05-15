@@ -3,9 +3,8 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from app.entities.balance import BalanceEntity
-from app.tasks.balance_tasks import update_balance_async
 from app.core.logging import setup_logger
+from app.entities.balance import BalanceEntity
 
 
 class BalanceRepository:

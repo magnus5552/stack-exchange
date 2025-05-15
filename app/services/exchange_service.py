@@ -80,7 +80,7 @@ class ExchangeService:
             balance = self.balance_repo.get_by_user_and_ticker(user_id, "RUB")
             required_amount = body.price * body.qty
 
-            if not balance or balance.amount < required_amount:
+            if not balance or (balance.amount - balance.locked_amount) < required_amount:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=f"Insufficient RUB balance for order"
