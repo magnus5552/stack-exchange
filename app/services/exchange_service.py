@@ -318,8 +318,8 @@ class ExchangeService:
                 # Для покупки берем самые дешевые ордера сначала
                 active_orders = active_orders.order_by(OrderEntity.price.asc(), OrderEntity.created_at)
             else:
-                # Для продажи берем самые дорогие ордера сначала
-                active_orders = active_orders.order_by(OrderEntity.price.desc(), OrderEntity.created_at)
+                # Для продажи берем самые (дорогие) дешевые ордера сначала
+                active_orders = active_orders.order_by(OrderEntity.price.asc(), OrderEntity.created_at)
 
         # Получаем список ордеров для матчинга
         matching_orders = active_orders.all()
