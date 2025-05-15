@@ -98,13 +98,13 @@ class ExchangeService:
         else:  # Direction.SELL
             # Для продажи нужны акции
             balance = self.balance_repo.get_by_user_and_ticker(user_id, body.ticker)
-            
+
             if not balance or balance.amount < body.qty:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=f"Insufficient {body.ticker} balance for order"
                 )
-            
+
             # Блокируем акции вместо их списания
             balance_locked = self.balance_repo.lock_balance(user_id, body.ticker, body.qty)
             if balance_locked is None:
@@ -185,7 +185,7 @@ class ExchangeService:
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="No buyers available for market sell"
                 )
-            
+
             # Проверяем баланс акций
             balance = self.balance_repo.get_by_user_and_ticker(user_id, body.ticker)
             if not balance or balance.amount < body.qty:
@@ -193,7 +193,7 @@ class ExchangeService:
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=f"Insufficient {body.ticker} balance for market order"
                 )
-            
+
             # Проверяем, хватит ли ликвидности для продажи
             available_qty = sum(level.qty for level in orderbook.bid_levels)
             if available_qty < body.qty:
@@ -201,7 +201,7 @@ class ExchangeService:
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail="Not enough liquidity in the order book"
                 )
-            
+
             # Блокируем акции вместо их списания
             balance_locked = self.balance_repo.lock_balance(user_id, body.ticker, body.qty)
             if balance_locked is None:
@@ -371,15 +371,15 @@ class ExchangeService:
                 balance_result = self.balance_repo.unlock_and_subtract_balance(order.user_id, "RUB", execution_qty * execution_price)
                 if balance_result is None:
                     self.logger.error(f"Ошибка при списании средств покупателя: user_id={order.user_id}, amount={execution_qty * execution_price}")
-                
+
                 # Покупатель получает акции
                 self.balance_repo.update_balance(order.user_id, order.ticker, execution_qty)
-                
+
                 # Разблокируем и списываем акции продавца
                 balance_result = self.balance_repo.unlock_and_subtract_balance(matching_order.user_id, order.ticker, execution_qty)
                 if balance_result is None:
                     self.logger.error(f"Ошибка при списании акций продавца: user_id={matching_order.user_id}, ticker={order.ticker}, amount={execution_qty}")
-                
+
                 # Продавец получает деньги
                 self.balance_repo.update_balance(matching_order.user_id, "RUB", execution_qty * execution_price)
             else:
@@ -387,22 +387,21 @@ class ExchangeService:
                 balance_result = self.balance_repo.unlock_and_subtract_balance(order.user_id, order.ticker, execution_qty)
                 if balance_result is None:
                     self.logger.error(f"Ошибка при списании акций продавца: user_id={order.user_id}, ticker={order.ticker}, amount={execution_qty}")
-                
+
                 # Продавец получает деньги
                 self.balance_repo.update_balance(order.user_id, "RUB", execution_qty * execution_price)
-                
+
                 # Разблокируем и списываем средства покупателя
                 balance_result = self.balance_repo.unlock_and_subtract_balance(matching_order.user_id, "RUB", execution_qty * execution_price)
                 if balance_result is None:
                     self.logger.error(f"Ошибка при списании средств покупателя: user_id={matching_order.user_id}, amount={execution_qty * execution_price}")
-                
+
                 # Покупатель получает акции
                 self.balance_repo.update_balance(matching_order.user_id, order.ticker, execution_qty)
 
-
             buyer_order_id = order.id if is_buy else matching_order.id
             seller_order_id = matching_order.id if is_buy else order.id
-            
+
             # Создаем запись о транзакции
             self.logger.info(f"Creating transaction: ticker={order.ticker}, amount={execution_qty}, price={execution_price}")
             try:
