@@ -8,8 +8,8 @@ engine = create_engine(
     settings.DB_CONN_STRING,
     echo=settings.DB_ECHO,
     poolclass=QueuePool,
-    pool_size=40,
-    max_overflow=30,
+    pool_size=60,
+    max_overflow=50,
     pool_pre_ping=True,
     pool_recycle=3600,
     pool_timeout=60
