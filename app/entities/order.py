@@ -31,7 +31,6 @@ class LimitOrderEntity(OrderEntity):
         'polymorphic_identity': 'limit',
     }
 
-
 class MarketOrderEntity(OrderEntity):
     __mapper_args__ = {
         'polymorphic_identity': 'market',
