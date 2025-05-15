@@ -111,19 +111,19 @@ async def startup_event():
     logger.info(f"Системная информация: {system_info}")
 
     try:
-        db = next(get_db())
-        logger.info("Соединение с базой данных успешно установлено")
+        with next(get_db()) as db:
+            logger.info("Соединение с базой данных успешно установлено")
 
-        try:
-            logger.info("Создание администратора, если необходимо...")
-            admin_key = create_admin_user(db)
-            logger.info(f"API ключ администратора: {admin_key}")
+            try:
+                logger.info("Создание администратора, если необходимо...")
+                admin_key = create_admin_user(db)
+                logger.info(f"API ключ администратора: {admin_key}")
 
-            print(f"\nAdmin API key: {admin_key}\n")
-        except Exception as admin_error:
-            logger.error(
-                f"Ошибка создания администратора: {admin_error}", exc_info=True
-            )
+                print(f"\nAdmin API key: {admin_key}\n")
+            except Exception as admin_error:
+                logger.error(
+                    f"Ошибка создания администратора: {admin_error}", exc_info=True
+                )
 
         logger.info("Приложение успешно запущено")
         logger.info("=" * 50)
