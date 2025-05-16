@@ -31,9 +31,9 @@ class ExchangeService:
         bids = [order for order in active_orders if order.direction == Direction.BUY and order.type == 'limit']
         asks = [order for order in active_orders if order.direction == Direction.SELL and order.type == 'limit']
 
-        # Сортируем bids по возрастанию цены (лучшая цена покупки - самая низкая)
-        bids.sort(key=lambda x: x.price)
-        # Сортируем asks по возрастанию цены (лучшая цена продажи - самая высокая)
+        # Сортируем bids по возрастанию цены (лучшая цена покупки - самая высокая)
+        bids.sort(key=lambda x: x.price, reverse=True)
+        # Сортируем asks по убыванию цены (лучшая цена продажи - самая низкая)
         asks.sort(key=lambda x: x.price)
 
         # Группируем по ценовым уровням и суммируем количество
