@@ -107,15 +107,15 @@ class ExchangeService:
                     detail=f"Недостаточно средств {body.ticker} для создания ордера"
             )
 
-        # Блокируем акции вместо их списания
-        balance_locked = self.balance_repo.lock_balance(user_id, body.ticker, body.qty)
-        if balance_locked is None:
-            available = self.balance_repo.get_by_user_and_ticker(user_id, body.ticker)
-            available_amount = (available.amount - available.locked_amount) if available else 0
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Недостаточно доступных средств {body.ticker} для блокировки (доступно {available_amount}, требуется {body.qty})"
-            )
+            # Блокируем акции вместо их списания
+            balance_locked = self.balance_repo.lock_balance(user_id, body.ticker, body.qty)
+            if balance_locked is None:
+                available = self.balance_repo.get_by_user_and_ticker(user_id, body.ticker)
+                available_amount = (available.amount - available.locked_amount) if available else 0
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Недостаточно доступных средств {body.ticker} для блокировки (доступно {available_amount}, требуется {body.qty})"
+                )
 
         # Создаем ордер
         order = self.order_repo.create_limit_order(user_id, body)
