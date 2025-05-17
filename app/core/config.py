@@ -22,6 +22,7 @@ class Settings(BaseSettings):
     ADMIN_TOKEN: Optional[str] = None
 
     class Config:
+        extra = "ignore"
         env_file = ".env"
         env_file_encoding = "utf-8"
 
