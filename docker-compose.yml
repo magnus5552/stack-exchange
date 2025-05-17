@@ -9,9 +9,12 @@ services:
       - DB_ECHO=${DB_ECHO:-True}
       - REDIS_HOST=${REDIS_HOST:-redis}
       - REDIS_PORT=${REDIS_PORT:-6379}
+      - SECRET_KEY=${SECRET_KEY}
     depends_on:
-      - postgres
-      - redis
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     networks:
       - exchange-network
     restart: unless-stopped
@@ -29,7 +32,12 @@ services:
     networks:
       - exchange-network
     restart: unless-stopped
-    
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
   redis:
     image: redis:7-alpine
     ports:
@@ -37,6 +45,11 @@ services:
     networks:
       - exchange-network
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
 
   celery:
     build: .
@@ -49,9 +62,12 @@ services:
       - DB_CONN_STRING=postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
       - REDIS_HOST=${REDIS_HOST:-redis}
       - REDIS_PORT=${REDIS_PORT:-6379}
+      - SECRET_KEY=${SECRET_KEY}
     depends_on:
-      - redis
-      - postgres
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     networks:
       - exchange-network
     restart: unless-stopped
@@ -60,7 +76,6 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-
 
 networks:
   exchange-network:
