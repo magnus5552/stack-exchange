@@ -24,6 +24,7 @@ class ExchangeService:
         self.instrument_repo = InstrumentRepository(db)
 
     async def get_orderbook(self, ticker: str, limit: int = 10) -> L2OrderBook:
+        """Получение стакана заявок для указанного инструмента"""
         # Получаем все активные ордера для данного инструмента
         active_orders = self.order_repo.get_active_by_ticker(ticker)
 
@@ -66,12 +67,13 @@ class ExchangeService:
         return [self.transaction_repo.to_model(t) for t in transactions]
 
     async def create_limit_order(self, user_id: UUID, body: LimitOrderBody) -> str:
+        """Создание лимитного ордера"""
         # Проверяем существование инструмента
         instrument = self.instrument_repo.get_by_ticker(body.ticker)
         if not instrument:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Instrument {body.ticker} not found"
+                detail=f"Инструмент {body.ticker} не найден"
             )
 
         # Проверяем достаточно ли средств у пользователя
@@ -83,7 +85,7 @@ class ExchangeService:
             if not balance or (balance.amount - balance.locked_amount) < required_amount:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Insufficient RUB balance for order"
+                    detail=f"Недостаточно средств RUB для создания ордера"
                 )
 
             # Блокируем средства вместо их списания
@@ -102,18 +104,18 @@ class ExchangeService:
             if not balance or balance.amount < body.qty:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Insufficient {body.ticker} balance for order"
-                )
+                    detail=f"Недостаточно средств {body.ticker} для создания ордера"
+            )
 
-            # Блокируем акции вместо их списания
-            balance_locked = self.balance_repo.lock_balance(user_id, body.ticker, body.qty)
-            if balance_locked is None:
-                available = self.balance_repo.get_by_user_and_ticker(user_id, body.ticker)
-                available_amount = (available.amount - available.locked_amount) if available else 0
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Недостаточно доступных средств {body.ticker} для блокировки (доступно {available_amount}, требуется {body.qty})"
-                )
+        # Блокируем акции вместо их списания
+        balance_locked = self.balance_repo.lock_balance(user_id, body.ticker, body.qty)
+        if balance_locked is None:
+            available = self.balance_repo.get_by_user_and_ticker(user_id, body.ticker)
+            available_amount = (available.amount - available.locked_amount) if available else 0
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Недостаточно доступных средств {body.ticker} для блокировки (доступно {available_amount}, требуется {body.qty})"
+            )
 
         # Создаем ордер
         order = self.order_repo.create_limit_order(user_id, body)
@@ -124,12 +126,13 @@ class ExchangeService:
         return str(order.id)
 
     async def create_market_order(self, user_id: UUID, body: MarketOrderBody) -> str:
+        """Создание рыночного ордера"""
         # Проверяем существование инструмента
         instrument = self.instrument_repo.get_by_ticker(body.ticker)
         if not instrument:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Instrument {body.ticker} not found"
+                detail=f"Инструмент {body.ticker} не найден"
             )
 
         # Получаем стакан для проверки ликвидности
@@ -140,7 +143,7 @@ class ExchangeService:
             if not orderbook.ask_levels:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="No sellers available for market buy"
+                    detail="Нет продавцов для рыночной покупки"
                 )
 
             # Рассчитываем необходимую сумму для покупки
@@ -158,7 +161,7 @@ class ExchangeService:
             if remaining_qty > 0:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Not enough liquidity in the order book"
+                    detail="Недостаточная ликвидность в стакане заявок"
                 )
 
             # Проверяем баланс
@@ -166,7 +169,7 @@ class ExchangeService:
             if not balance or balance.amount < required_amount:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Insufficient RUB balance for market order"
+                    detail=f"Недостаточно средств RUB для рыночного ордера"
                 )
 
             # Блокируем средства вместо их списания
@@ -183,7 +186,7 @@ class ExchangeService:
             if not orderbook.bid_levels:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="No buyers available for market sell"
+                    detail="Нет покупателей для рыночной продажи"
                 )
 
             # Проверяем баланс акций
@@ -191,7 +194,7 @@ class ExchangeService:
             if not balance or balance.amount < body.qty:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Insufficient {body.ticker} balance for market order"
+                    detail=f"Недостаточно средств {body.ticker} для рыночного ордера"
                 )
 
             # Проверяем, хватит ли ликвидности для продажи
@@ -199,8 +202,8 @@ class ExchangeService:
             if available_qty < body.qty:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail="Not enough liquidity in the order book"
-                )
+                    detail="Недостаточная ликвидность в стакане заявок"
+            )
 
             # Блокируем акции вместо их списания
             balance_locked = self.balance_repo.lock_balance(user_id, body.ticker, body.qty)
@@ -223,35 +226,37 @@ class ExchangeService:
         return str(order.id)
 
     async def get_order(self, order_id: UUID) -> Union[LimitOrder, MarketOrder]:
+        """Получение информации об ордере"""
         order = self.order_repo.get_by_id(order_id)
         if not order:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Order with id {order_id} not found"
+                detail=f"Ордер с идентификатором {order_id} не найден"
             )
 
         return self.order_repo.to_model(order)
 
     async def cancel_order(self, user_id: UUID, order_id: UUID) -> bool:
+        """Отмена ордера"""
         order = self.order_repo.get_by_id(order_id)
 
         if not order:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Order with id {order_id} not found"
+                detail=f"Ордер с идентификатором {order_id} не найден"
             )
 
         if str(order.user_id) != str(user_id):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail="You can only cancel your own orders"
+                detail="Вы можете отменять только свои ордера"
             )
 
         if order.status not in [OrderStatus.NEW, OrderStatus.PARTIALLY_EXECUTED]:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Cannot cancel order with status {order.status}"
-            )
+                detail=f"Невозможно отменить ордер со статусом {order.status}"
+        )
 
         # Разблокируем средства обратно на баланс пользователя
         if order.direction == Direction.BUY:
@@ -283,15 +288,18 @@ class ExchangeService:
         order = self.order_repo.get_by_id(order_id)
 
         if not order:
+            self.logger.warning(f"Ордер с ID {order_id} не найден при матчинге")
             return
-
+    
         # Если ордер уже исполнен или отменен, ничего не делаем
         if order.status in [OrderStatus.EXECUTED, OrderStatus.CANCELLED]:
+            self.logger.debug(f"Пропускаем матчинг для ордера {order_id} со статусом {order.status}")
             return
 
         # Находим встречные ордера
         is_buy = order.direction == Direction.BUY
         counter_direction = Direction.SELL if is_buy else Direction.BUY
+        self.logger.debug(f"Поиск встречных ордеров для {order_id} (направление: {'покупка' if is_buy else 'продажа'})")
 
         # Получаем все активные ордера с противоположным направлением
         active_orders = self.db.query(OrderEntity).filter(
